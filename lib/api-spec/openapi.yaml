@@ -1,22 +1,34 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ExamCrack AI Coach API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: profile
+    description: Student profile operations
+  - name: onboarding
+    description: Onboarding operations
+  - name: dashboard
+    description: Dashboard operations
+  - name: syllabus
+    description: Syllabus and topic tracking
+  - name: planner
+    description: Daily study planner
+  - name: progress
+    description: Progress and analytics
+  - name: ai
+    description: AI teacher and mock analysis (mock responses)
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +36,325 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Onboarding ──────────────────────────────────────────────────────────────
+  /onboarding:
+    post:
+      operationId: submitOnboarding
+      tags: [onboarding]
+      summary: Submit onboarding data and generate student profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardingInput"
+      responses:
+        "201":
+          description: Onboarding complete, student profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+
+  /onboarding/status:
+    get:
+      operationId: getOnboardingStatus
+      tags: [onboarding]
+      summary: Check if current user has completed onboarding
+      responses:
+        "200":
+          description: Onboarding status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingStatus"
+
+  # ── Student Profile ──────────────────────────────────────────────────────────
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get the current user's student profile
+      responses:
+        "200":
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+        "404":
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateProfile
+      tags: [profile]
+      summary: Update student profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+
+  # ── Dashboard ────────────────────────────────────────────────────────────────
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get full dashboard summary for the current user
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardData"
+
+  # ── Syllabus ─────────────────────────────────────────────────────────────────
+  /syllabus:
+    get:
+      operationId: getSyllabus
+      tags: [syllabus]
+      summary: Get full syllabus with all topics and user mastery scores
+      responses:
+        "200":
+          description: Syllabus topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SyllabusTopic"
+
+  /syllabus/topics/{id}/mastery:
+    patch:
+      operationId: updateTopicMastery
+      tags: [syllabus]
+      summary: Update user mastery score for a topic
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MasteryUpdate"
+      responses:
+        "200":
+          description: Updated topic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyllabusTopic"
+
+  /syllabus/priority:
+    get:
+      operationId: getPriorityTopics
+      tags: [syllabus]
+      summary: Get AI-prioritized topics to study next
+      responses:
+        "200":
+          description: Priority topics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriorityTopicsResponse"
+
+  # ── Daily Planner ─────────────────────────────────────────────────────────────
+  /planner/today:
+    get:
+      operationId: getTodayPlan
+      tags: [planner]
+      summary: Get today's study plan
+      responses:
+        "200":
+          description: Today's plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayPlan"
+
+  /planner/weekly:
+    get:
+      operationId: getWeeklyPlan
+      tags: [planner]
+      summary: Get this week's study plan
+      responses:
+        "200":
+          description: Weekly plan
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DayPlan"
+
+  /planner/tasks/{id}/complete:
+    patch:
+      operationId: completeTask
+      tags: [planner]
+      summary: Mark a task as completed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskCompleteInput"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyTask"
+
+  /planner/study-log:
+    post:
+      operationId: logStudySession
+      tags: [planner]
+      summary: Log study hours for today
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudyLogInput"
+      responses:
+        "201":
+          description: Session logged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudySession"
+
+  # ── Progress ──────────────────────────────────────────────────────────────────
+  /progress:
+    get:
+      operationId: getProgress
+      tags: [progress]
+      summary: Get overall progress summary
+      responses:
+        "200":
+          description: Progress data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressSummary"
+
+  /progress/heatmap:
+    get:
+      operationId: getSkillHeatmap
+      tags: [progress]
+      summary: Get topic-wise skill heatmap
+      responses:
+        "200":
+          description: Skill heatmap data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HeatmapEntry"
+
+  /progress/streak:
+    get:
+      operationId: getStudyStreak
+      tags: [progress]
+      summary: Get study streak and accountability data
+      responses:
+        "200":
+          description: Streak data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreakData"
+
+  /progress/selection-probability:
+    get:
+      operationId: getSelectionProbability
+      tags: [progress]
+      summary: Get current and projected selection probability
+      responses:
+        "200":
+          description: Selection probability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SelectionProbability"
+
+  # ── AI Teacher (Mock) ─────────────────────────────────────────────────────────
+  /ai/explain:
+    post:
+      operationId: explainTopic
+      tags: [ai]
+      summary: Get AI explanation for a topic (mock)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainTopicInput"
+      responses:
+        "200":
+          description: AI explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIExplanation"
+
+  /ai/question:
+    post:
+      operationId: generateQuestion
+      tags: [ai]
+      summary: Generate a practice question (mock)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionInput"
+      responses:
+        "200":
+          description: Practice question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PracticeQuestion"
+
+  /ai/motivation:
+    get:
+      operationId: getMotivationMessage
+      tags: [ai]
+      summary: Get today's AI motivation message (mock)
+      responses:
+        "200":
+          description: Motivation message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotivationMessage"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +365,594 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    # ── Onboarding ───────────────────────────────────────────────────────────
+    OnboardingInput:
+      type: object
+      required:
+        - name
+        - category
+        - qualification
+        - targetExam
+        - dailyStudyHours
+        - previousAttempts
+        - strengthAreas
+        - weakAreas
+        - learningStyle
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+          description: e.g. General, OBC, SC/ST
+        qualification:
+          type: string
+        targetExam:
+          type: string
+        dailyStudyHours:
+          type: number
+        previousAttempts:
+          type: integer
+        strengthAreas:
+          type: array
+          items:
+            type: string
+        weakAreas:
+          type: array
+          items:
+            type: string
+        learningStyle:
+          type: string
+          enum: [visual, story, exam_oriented, quick_revision]
+        language:
+          type: string
+          enum: [english, hindi, hinglish]
+          default: english
+
+    OnboardingStatus:
+      type: object
+      required:
+        - completed
+      properties:
+        completed:
+          type: boolean
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    # ── Student Profile ──────────────────────────────────────────────────────
+    StudentProfile:
+      type: object
+      required:
+        - id
+        - clerkUserId
+        - name
+        - category
+        - qualification
+        - targetExam
+        - dailyStudyHours
+        - previousAttempts
+        - strengthAreas
+        - weakAreas
+        - learningStyle
+        - language
+        - successProbabilityBaseline
+        - createdAt
+      properties:
+        id:
+          type: integer
+        clerkUserId:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        qualification:
+          type: string
+        targetExam:
+          type: string
+        dailyStudyHours:
+          type: number
+        previousAttempts:
+          type: integer
+        strengthAreas:
+          type: array
+          items:
+            type: string
+        weakAreas:
+          type: array
+          items:
+            type: string
+        learningStyle:
+          type: string
+        language:
+          type: string
+        successProbabilityBaseline:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    ProfileUpdate:
+      type: object
+      properties:
+        dailyStudyHours:
+          type: number
+        learningStyle:
+          type: string
+        language:
+          type: string
+        strengthAreas:
+          type: array
+          items:
+            type: string
+        weakAreas:
+          type: array
+          items:
+            type: string
+
+    # ── Dashboard ────────────────────────────────────────────────────────────
+    DashboardData:
+      type: object
+      required:
+        - profile
+        - todayTasksCount
+        - completedTasksCount
+        - studyHoursToday
+        - syllabusCompletionPercent
+        - selectionProbability
+        - streakDays
+        - weakTopics
+        - strongTopics
+        - upcomingMilestones
+        - motivationMessage
+      properties:
+        profile:
+          $ref: "#/components/schemas/StudentProfile"
+        todayTasksCount:
+          type: integer
+        completedTasksCount:
+          type: integer
+        studyHoursToday:
+          type: number
+        syllabusCompletionPercent:
+          type: number
+        selectionProbability:
+          type: number
+        streakDays:
+          type: integer
+        weakTopics:
+          type: array
+          items:
+            type: string
+        strongTopics:
+          type: array
+          items:
+            type: string
+        upcomingMilestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        motivationMessage:
+          type: string
+
+    Milestone:
+      type: object
+      required:
+        - id
+        - title
+        - dueDate
+        - completed
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        completed:
+          type: boolean
+
+    # ── Syllabus ─────────────────────────────────────────────────────────────
+    SyllabusTopic:
+      type: object
+      required:
+        - id
+        - subject
+        - topicName
+        - weightage
+        - pyqFrequency
+        - difficultyScore
+        - masteryScore
+        - priorityScore
+        - status
+      properties:
+        id:
+          type: integer
+        subject:
+          type: string
+        topicName:
+          type: string
+        weightage:
+          type: number
+          description: Exam weightage (0-100)
+        pyqFrequency:
+          type: integer
+          description: Number of times appeared in PYQs
+        difficultyScore:
+          type: number
+          description: Difficulty 1-10
+        masteryScore:
+          type: number
+          description: User mastery 0-100
+        priorityScore:
+          type: number
+          description: Calculated priority score
+        status:
+          type: string
+          enum: [not_started, in_progress, mastered, revision_needed]
+
+    MasteryUpdate:
+      type: object
+      required:
+        - masteryScore
+      properties:
+        masteryScore:
+          type: number
+
+    PriorityTopicsResponse:
+      type: object
+      required:
+        - toStudy
+        - toRevise
+        - toIgnore
+      properties:
+        toStudy:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyllabusTopic"
+        toRevise:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyllabusTopic"
+        toIgnore:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyllabusTopic"
+
+    # ── Planner ──────────────────────────────────────────────────────────────
+    DayPlan:
+      type: object
+      required:
+        - date
+        - tasks
+        - totalHours
+        - completedHours
+        - dailyGoalHours
+      properties:
+        date:
+          type: string
+          format: date
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyTask"
+        totalHours:
+          type: number
+        completedHours:
+          type: number
+        dailyGoalHours:
+          type: number
+
+    StudyTask:
+      type: object
+      required:
+        - id
+        - title
+        - subject
+        - topicName
+        - durationMinutes
+        - taskType
+        - completed
+        - scheduledDate
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        subject:
+          type: string
+        topicName:
+          type: string
+        durationMinutes:
+          type: integer
+        taskType:
+          type: string
+          enum: [study, practice, revision, mock_test]
+        completed:
+          type: boolean
+        scheduledDate:
+          type: string
+          format: date
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    TaskCompleteInput:
+      type: object
+      required:
+        - completed
+      properties:
+        completed:
+          type: boolean
+
+    StudyLogInput:
+      type: object
+      required:
+        - hours
+        - date
+      properties:
+        hours:
+          type: number
+        date:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    StudySession:
+      type: object
+      required:
+        - id
+        - hours
+        - date
+        - createdAt
+      properties:
+        id:
+          type: integer
+        hours:
+          type: number
+        date:
+          type: string
+          format: date
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Progress ─────────────────────────────────────────────────────────────
+    ProgressSummary:
+      type: object
+      required:
+        - overallMasteryPercent
+        - syllabusCompletionPercent
+        - totalStudyHours
+        - weeklyStudyHours
+        - readinessScore
+        - subjectBreakdown
+      properties:
+        overallMasteryPercent:
+          type: number
+        syllabusCompletionPercent:
+          type: number
+        totalStudyHours:
+          type: number
+        weeklyStudyHours:
+          type: number
+        readinessScore:
+          type: number
+        subjectBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectProgress"
+
+    SubjectProgress:
+      type: object
+      required:
+        - subject
+        - masteryPercent
+        - topicsTotal
+        - topicsCompleted
+      properties:
+        subject:
+          type: string
+        masteryPercent:
+          type: number
+        topicsTotal:
+          type: integer
+        topicsCompleted:
+          type: integer
+
+    HeatmapEntry:
+      type: object
+      required:
+        - topicId
+        - topicName
+        - subject
+        - masteryScore
+        - level
+      properties:
+        topicId:
+          type: integer
+        topicName:
+          type: string
+        subject:
+          type: string
+        masteryScore:
+          type: number
+        level:
+          type: string
+          enum: [weak, moderate, strong, mastered]
+
+    StreakData:
+      type: object
+      required:
+        - currentStreak
+        - longestStreak
+        - totalStudyDays
+        - last30Days
+        - missedDays
+        - productivityScore
+      properties:
+        currentStreak:
+          type: integer
+        longestStreak:
+          type: integer
+        totalStudyDays:
+          type: integer
+        last30Days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyStudyRecord"
+        missedDays:
+          type: integer
+        productivityScore:
+          type: number
+
+    DailyStudyRecord:
+      type: object
+      required:
+        - date
+        - hours
+        - studied
+      properties:
+        date:
+          type: string
+          format: date
+        hours:
+          type: number
+        studied:
+          type: boolean
+
+    SelectionProbability:
+      type: object
+      required:
+        - current
+        - projected
+        - baseline
+        - riskAreas
+        - trend
+      properties:
+        current:
+          type: number
+        projected:
+          type: number
+        baseline:
+          type: number
+        riskAreas:
+          type: array
+          items:
+            type: string
+        trend:
+          type: string
+          enum: [improving, stable, declining]
+
+    # ── AI Teacher (Mock) ─────────────────────────────────────────────────────
+    ExplainTopicInput:
+      type: object
+      required:
+        - topicId
+        - mode
+      properties:
+        topicId:
+          type: integer
+        mode:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        learningStyle:
+          type: string
+          enum: [story, visual, exam_oriented, quick_revision]
+        language:
+          type: string
+          enum: [english, hindi, hinglish]
+
+    AIExplanation:
+      type: object
+      required:
+        - topicName
+        - explanation
+        - keyPoints
+        - examTips
+        - mode
+      properties:
+        topicName:
+          type: string
+        explanation:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        examTips:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+        language:
+          type: string
+
+    QuestionInput:
+      type: object
+      required:
+        - topicId
+        - difficulty
+      properties:
+        topicId:
+          type: integer
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+
+    PracticeQuestion:
+      type: object
+      required:
+        - id
+        - topicName
+        - question
+        - options
+        - correctAnswer
+        - explanation
+        - difficulty
+      properties:
+        id:
+          type: integer
+        topicName:
+          type: string
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        correctAnswer:
+          type: integer
+        explanation:
+          type: string
+        difficulty:
+          type: string
+
+    MotivationMessage:
+      type: object
+      required:
+        - message
+        - type
+        - date
+      properties:
+        message:
+          type: string
+        type:
+          type: string
+          enum: [encouragement, warning, milestone, streak]
+        date:
+          type: string
+          format: date
