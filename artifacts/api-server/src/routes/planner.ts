@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db, studyTasksTable, studySessionsTable, profilesTable, syllabusTopicsTable } from "@workspace/db";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { db, studyTasksTable, studySessionsTable, profilesTable, syllabusTopicsTable, userTopicMasteryTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { CompleteTaskParams, CompleteTaskBody, LogStudySessionBody } from "@workspace/api-zod";
+import { generateText, parseJSON } from "../lib/gemini";
 
 const router = Router();
 
@@ -24,6 +25,89 @@ function taskToJson(t: typeof studyTasksTable.$inferSelect) {
   };
 }
 
+async function generateAITasks(userId: string, date: string) {
+  const [profile] = await db
+    .select()
+    .from(profilesTable)
+    .where(eq(profilesTable.clerkUserId, userId))
+    .limit(1);
+
+  const topics = await db.select().from(syllabusTopicsTable);
+  if (topics.length === 0) return null;
+
+  const masteries = await db
+    .select()
+    .from(userTopicMasteryTable)
+    .where(eq(userTopicMasteryTable.clerkUserId, userId));
+
+  const masteryMap = new Map(masteries.map((m) => [m.topicId, m.masteryScore]));
+
+  const topicSummary = topics
+    .map((t) => ({
+      id: t.id,
+      subject: t.subject,
+      topicName: t.topicName,
+      weightage: t.weightage,
+      pyqFrequency: t.pyqFrequency,
+      difficultyScore: t.difficultyScore,
+      masteryScore: masteryMap.get(t.id) ?? 0,
+    }))
+    .sort((a, b) => {
+      const priorityA = (a.weightage * (100 - a.masteryScore) * (1 + a.pyqFrequency * 0.1)) / 100;
+      const priorityB = (b.weightage * (100 - b.masteryScore) * (1 + b.pyqFrequency * 0.1)) / 100;
+      return priorityB - priorityA;
+    })
+    .slice(0, 10);
+
+  const studyHours = profile?.dailyStudyHours ?? 4;
+  const strengths = profile?.strengthAreas ?? [];
+  const weaknesses = profile?.weakAreas ?? [];
+  const learningStyle = profile?.learningStyle ?? "exam_oriented";
+
+  const prompt = `You are an expert study planner for the Rajasthan Basic Computer Instructor government exam.
+
+Student profile:
+- Daily study hours available: ${studyHours} hours (${studyHours * 60} minutes total)
+- Strength areas: ${strengths.join(", ") || "not specified"}
+- Weak areas: ${weaknesses.join(", ") || "not specified"}
+- Learning style: ${learningStyle}
+
+Top priority topics (sorted by priority score):
+${topicSummary.map((t) => `- ${t.topicName} (${t.subject}): mastery=${t.masteryScore}%, weightage=${t.weightage}, PYQ frequency=${t.pyqFrequency}`).join("\n")}
+
+Create a focused study plan for today (${date}) with exactly 4 tasks.
+Tasks must cover study, practice, and revision. Total duration must equal exactly ${studyHours * 60} minutes.
+
+Respond ONLY with valid JSON (no markdown, no extra text):
+{
+  "tasks": [
+    {
+      "title": "Task title (e.g. 'Study: Memory & Storage')",
+      "subject": "Subject name",
+      "topicName": "Topic name",
+      "durationMinutes": 60,
+      "taskType": "study"
+    }
+  ]
+}
+
+taskType must be one of: study, practice, revision, mock_test
+Choose topics that maximize the student's selection probability based on their mastery gaps and topic weightage.`;
+
+  const raw = await generateText(prompt);
+  const parsed = parseJSON<{
+    tasks: Array<{
+      title: string;
+      subject: string;
+      topicName: string;
+      durationMinutes: number;
+      taskType: string;
+    }>;
+  }>(raw);
+
+  return parsed.tasks;
+}
+
 async function ensureTodayTasks(userId: string, date: string) {
   const existing = await db
     .select()
@@ -36,52 +120,51 @@ async function ensureTodayTasks(userId: string, date: string) {
     );
   if (existing.length > 0) return existing;
 
-  const [profile] = await db
-    .select()
-    .from(profilesTable)
-    .where(eq(profilesTable.clerkUserId, userId))
-    .limit(1);
+  let tasks: Array<{
+    title: string;
+    subject: string;
+    topicName: string;
+    durationMinutes: number;
+    taskType: string;
+  }> | null = null;
 
-  const topics = await db.select().from(syllabusTopicsTable).limit(20);
+  try {
+    tasks = await generateAITasks(userId, date);
+  } catch (err) {
+    // Gemini unavailable — fall through to fallback
+  }
 
-  if (topics.length === 0) return [];
+  if (!tasks) {
+    const [profile] = await db
+      .select()
+      .from(profilesTable)
+      .where(eq(profilesTable.clerkUserId, userId))
+      .limit(1);
+    const topicRows = await db.select().from(syllabusTopicsTable).limit(20);
+    if (topicRows.length === 0) return [];
+    const studyHours = profile?.dailyStudyHours ?? 4;
+    const totalMinutes = studyHours * 60;
+    const pick = (n: number) => topicRows[Math.floor(Math.random() * n)];
+    tasks = [
+      { taskType: "study", durationMinutes: Math.round(totalMinutes * 0.35), ...{ title: `Study: ${pick(topicRows.length).topicName}`, subject: pick(topicRows.length).subject, topicName: pick(topicRows.length).topicName } },
+      { taskType: "practice", durationMinutes: Math.round(totalMinutes * 0.25), ...{ title: `Practice: ${pick(topicRows.length).topicName}`, subject: pick(topicRows.length).subject, topicName: pick(topicRows.length).topicName } },
+      { taskType: "revision", durationMinutes: Math.round(totalMinutes * 0.25), ...{ title: `Revision: ${pick(topicRows.length).topicName}`, subject: pick(topicRows.length).subject, topicName: pick(topicRows.length).topicName } },
+      { taskType: "study", durationMinutes: Math.round(totalMinutes * 0.15), ...{ title: `Study: ${pick(topicRows.length).topicName}`, subject: pick(topicRows.length).subject, topicName: pick(topicRows.length).topicName } },
+    ];
+  }
 
-  const studyHours = profile?.dailyStudyHours ?? 4;
-  const totalMinutes = studyHours * 60;
-
-  const taskTemplates = [
-    { taskType: "study", durationMinutes: Math.round(totalMinutes * 0.35) },
-    { taskType: "practice", durationMinutes: Math.round(totalMinutes * 0.25) },
-    { taskType: "revision", durationMinutes: Math.round(totalMinutes * 0.25) },
-    { taskType: "study", durationMinutes: Math.round(totalMinutes * 0.15) },
-  ];
-
-  const picks = [
-    topics[Math.floor(Math.random() * topics.length)],
-    topics[Math.floor(Math.random() * topics.length)],
-    topics[Math.floor(Math.random() * topics.length)],
-    topics[Math.floor(Math.random() * topics.length)],
-  ];
-
-  const taskLabels: Record<string, string> = {
-    study: "Study",
-    practice: "Practice Questions",
-    revision: "Quick Revision",
-    mock_test: "Mock Test",
-  };
-
-  const values = taskTemplates.map((tmpl, i) => ({
+  const rows: (typeof studyTasksTable.$inferInsert)[] = tasks.map((t) => ({
     clerkUserId: userId,
-    title: `${taskLabels[tmpl.taskType] ?? "Study"}: ${picks[i].topicName}`,
-    subject: picks[i].subject,
-    topicName: picks[i].topicName,
-    durationMinutes: tmpl.durationMinutes,
-    taskType: tmpl.taskType,
+    title: t.title,
+    subject: t.subject,
+    topicName: t.topicName,
+    durationMinutes: t.durationMinutes,
+    taskType: t.taskType,
     completed: "false",
     scheduledDate: date,
   }));
 
-  return await db.insert(studyTasksTable).values(values).returning();
+  return await db.insert(studyTasksTable).values(rows).returning();
 }
 
 router.get("/planner/today", async (req, res): Promise<void> => {
@@ -204,7 +287,7 @@ router.post("/planner/study-log", async (req, res): Promise<void> => {
     .values({
       clerkUserId: userId,
       hours: body.data.hours,
-      date: body.data.date,
+      date: body.data.date.toISOString().split("T")[0],
       notes: body.data.notes ?? null,
     })
     .returning();
